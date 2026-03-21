@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${version}",
+  "name": "${mod_name}",
+  "description": "${mod_description}",
+  "authors": [${mod_authors_json}],
+  "contact": {
+    "sources": "${github_url}",
+    "issues": "${github_url}/issues"
+  },
+  "license": "${mod_license}",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.jaronline.minimash.fabric.MiniMash"],
+    "client": ["dev.jaronline.minimash.fabric.client.MiniMashClient"]
+  },
+  "depends": {
+    "fabricloader": "${fabric_loader_version_range}",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=${java_version}",
+    "fabric-api": "${fabric_api_version_range}"
+  }
+}

@@ -1,0 +1,23 @@
+labels:
+  # Versions
+  - name: "26.3"
+    color: "95e516"
+  # Modloaders
+  - name: "fabric"
+    color: "dfd0b4"
+  # Other Projects
+  - name: "root"
+    color: "dcd735"
+  - name: "common"
+    color: "ea143d"
+  - name: "changelog"
+    color: "ea143d"
+  - name: "vanilla"
+    color: "ea143d"
+  - name: "buildSrc"
+    color: "056deb"
+  # Gradle Misc
+  - name: "gradlew"
+    color: "d8c3ec"
+  - name: "versions"
+    color: "07ccfc"

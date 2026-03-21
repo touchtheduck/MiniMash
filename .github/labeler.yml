@@ -1,0 +1,43 @@
+26.3:
+  - base-branch: "26.3"
+fabric:
+  - changed-files:
+      - any-glob-to-any-file:
+          - Fabric/*
+          - Fabric/**/*
+root:
+  - changed-files:
+      - any-glob-to-any-file:
+          - build.gradle.kts
+          - settings.gradle.kts
+common:
+  - changed-files:
+      - any-glob-to-any-file:
+          - Common/*
+          - Common/**/*
+changelog:
+  - changed-files:
+      - any-glob-to-any-file:
+          - Changelog/*
+          - Changelog/**/*
+vanilla:
+  - changed-files:
+      - any-glob-to-any-file:
+          - VanillaClient/*
+          - VanillaClient/**/*
+buildSrc:
+  - changed-files:
+      - any-glob-to-any-file:
+          - buildSrc/*
+          - buildSrc/**/*
+gradlew:
+  - changed-files:
+      - any-glob-to-any-file:
+          - gradle/wrapper/*
+          - gradle/wrapper/**/*
+          - gradlew
+          - gradlew.bat
+versions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - gradle/libs.versions.toml

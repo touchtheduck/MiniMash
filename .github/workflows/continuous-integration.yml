@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: ["26.3"]
+  pull_request:
+    branches: ["26.3"]
+
+permissions:
+  contents: read
+
+env:
+  JAVA_DISTRIBUTION: "microsoft"
+  JAVA_VERSION: "25"
+  MC_VERSION: "26.3"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew build
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p dist
+          cp {Common,Fabric}/build/libs/*.jar dist
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: mod-build
+          path: dist
+          retention-days: ${{ vars.CI_ARTIFACT_RETENTION || 30 }}
+
+  mc-test:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        modloader: [fabric]
+        env: [client, server]
+        include:
+          - fabric-api: none
+            dependencies: ""
+          - modloader: fabric
+            module: Fabric
+            mc-runtime-test: fabric
+            fabric-api: 0.162.0+26.3
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Create cache key
+        run: |
+          cat <<END_OF_FILE > dependencies.txt
+          ${{ matrix.dependencies }}
+          END_OF_FILE
+      - name: Cache dependencies
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: run/mods
+          key: ${{ hashFiles('dependencies.txt') }}
+      - name: Download dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          for url in ${{ matrix.dependencies }}; do
+            wget --directory-prefix=run/mods/ "$url"
+          done
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: mod-build
+          path: dist
+      - name: Prepare mod jar
+        run: |
+          rm -f dist/*-javadoc.jar dist/*-sources.jar
+          cp dist/minimash-26.3-${{ matrix.modloader }}-*.jar run/mods
+      - name: Run MC Runtime Test
+        if: matrix.env == 'client'
+        timeout-minutes: 10
+        uses: headlesshq/mc-runtime-test@645691de43520240e1d1e45b4b9a4d9cd9c294a4 # 4.5.2
+        with:
+          mc: ${{ env.MC_VERSION }}
+          modloader: ${{ matrix.modloader }}
+          regex: ${{ format('.*{0}.*', matrix.modloader) }}
+          mc-runtime-test: ${{ matrix.mc-runtime-test }}
+          java: ${{ env.JAVA_VERSION }}
+          fabric-api: ${{ matrix.fabric-api }}
+      - name: Run MC Server Test
+        if: matrix.env == 'server'
+        timeout-minutes: 10
+        uses: headlesshq/mc-server-test@42de00da95e997b046a43eb9beb516494e542ba9 # 1.1.1
+        with:
+          mc: ${{ env.MC_VERSION }}
+          modloader: ${{ matrix.modloader }}
+          java: ${{ env.JAVA_VERSION }}
+          fabric-api: ${{ matrix.fabric-api }}
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Lint
+        run: |
+          chmod +x gradlew
+          ./gradlew spotlessCheck --no-daemon
+
+  summary:
+    name: CI Summary
+    needs:
+      - build
+      - mc-test
+      - lint
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Build Result
+        uses: Jaronline/.github/actions/check-job-or-step-result@main
+        with:
+          result: ${{ needs.build.result }}
+      - name: Check Test Result
+        uses: Jaronline/.github/actions/check-job-or-step-result@main
+        with:
+          result: ${{ needs.test.result }}

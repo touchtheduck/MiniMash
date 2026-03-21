@@ -1,0 +1,185 @@
+name: Release Mod
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      publish-type:
+        description: 'Type of release to publish'
+        required: true
+        default: 'STABLE'
+        type: choice
+        options:
+          - STABLE
+          - BETA
+          - ALPHA
+
+permissions:
+  contents: read
+
+env:
+  MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+  CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+  JAVA_DISTRIBUTION: microsoft
+  JAVA_VERSION: '21'
+  JAVA_CACHE: gradle
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v6
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: ${{ env.JAVA_CACHE }}
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew build
+      - name: Prepare Artifacts
+        run: |
+          for d in Common Fabric; do
+            mkdir -p "dist/$d"
+            cp -r "$d/build" "dist/$d/build"
+          done
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: subprojects-build
+          path: dist
+          retention-days: ${{ vars.RELEASE_ARTIFACT_RETENTION || 30 }}
+
+  publish-maven:
+    name: Publish Maven
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        subproject:
+          - Common
+          - Fabric
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v6
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: ${{ env.JAVA_CACHE }}
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: subprojects-build
+          path: dist
+      - name: Prepare subproject
+        run: |
+          mv dist/${{ matrix.subproject }}/build ${{ matrix.subproject }}
+          rm -rf dist
+      - name: Publish :${{ matrix.subproject }}
+        run: ./gradlew :${{ matrix.subproject }}:publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  determine-publish-type:
+    name: Determine publish type
+    runs-on: ubuntu-latest
+    outputs:
+      publish-type: ${{ steps.set_publish_type.outputs.publish_type }}
+    steps:
+      - name: Set publish type
+        id: set_publish_type
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "publish_type=${{ github.event.inputs.publish-type }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            echo "publish_type=BETA" >> $GITHUB_OUTPUT
+          else
+            echo "publish_type=STABLE" >> $GITHUB_OUTPUT
+          fi
+      - run: echo "Publish type is ${{ steps.set_publish_type.outputs.publish_type }}"
+
+  publish-curseforge:
+    name: Publish CurseForge
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - determine-publish-type
+    strategy:
+      fail-fast: false
+      matrix:
+        subproject:
+          - Fabric
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v6
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: ${{ env.JAVA_CACHE }}
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: subprojects-build
+          path: dist
+      - name: Prepare subproject
+        run: |
+          mv dist/${{ matrix.subproject }}/build ${{ matrix.subproject }}
+          rm -rf dist
+      - name: Publish CurseForge
+        run: ./gradlew :${{ matrix.subproject }}:publushCurseforge
+        env:
+          PUBLISH_TYPE: ${{ needs.determine-publish-type.outputs.publish-type }}
+
+  publish-modrinth:
+    name: Publish Modrinth
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - determine-publish-type
+    strategy:
+      fail-fast: false
+      matrix:
+        subproject:
+          - Fabric
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v6
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: ${{ env.JAVA_CACHE }}
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: subprojects-build
+          path: dist
+      - name: Prepare subproject
+        run: |
+          mv dist/${{ matrix.subproject }}/build ${{ matrix.subproject }}
+          rm -rf dist
+      - name: Publish Modrinth
+        run: ./gradlew :${{ matrix.subproject }}:publushModrinth
+        env:
+          PUBLISH_TYPE: ${{ needs.determine-publish-type.outputs.publish-type }}
